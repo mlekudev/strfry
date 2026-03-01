@@ -55,6 +55,7 @@ void parseAndVerifyEvent(const tao::json::value &origJson, secp256k1_context *se
 
 
 std::optional<defaultDb::environment::View_Event> lookupEventById(lmdb::txn &txn, std::string_view id);
+inline bool eventExistsById(lmdb::txn &txn, std::string_view id) { return lookupEventById(txn, id).has_value(); }
 defaultDb::environment::View_Event lookupEventByLevId(lmdb::txn &txn, uint64_t levId); // throws if can't find
 uint64_t getMostRecentLevId(lmdb::txn &txn);
 std::string_view decodeEventPayload(lmdb::txn &txn, Decompressor &decomp, std::string_view raw, uint32_t *outDictId, size_t *outCompressedSize);

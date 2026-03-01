@@ -133,7 +133,7 @@ struct WriterPipeline {
                         numLive--;
 
                         PackedEventView packed(event.packedStr);
-                        if (lookupEventById(txn, packed.id())) {
+                        if (eventExistsById(txn, packed.id())) {
                             dups++;
                             totalDups++;
                             continue;

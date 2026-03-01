@@ -10,6 +10,74 @@ bool deleteEventBasic(lmdb::txn &txn, uint64_t levId) {
 }
 
 
+// Check if a replaceable or parameterized-replaceable event should supersede an existing one.
+// Returns Replaced if the incoming event loses the comparison; otherwise marks the old event
+// for deletion and returns nullopt (meaning the incoming event should proceed).
+
+static std::optional<EventWriteStatus> checkReplaceable(
+    lmdb::txn &txn, PackedEventView packed, EventKind kind,
+    std::vector<uint64_t> &levIdsToDelete, uint64_t logLevel)
+{
+    std::optional<std::string> replace;
+
+    if (kind.isReplaceable() || kind.isParamReplaceable()) {
+        packed.foreachTag([&](char tagName, std::string_view tagVal){
+            if (tagName != 'd') return true;
+            replace = std::string(tagVal);
+            return false;
+        });
+    }
+
+    if (!replace) return std::nullopt;
+
+    auto searchStr = std::string(packed.pubkey()) + *replace;
+    auto searchKey = makeKey_StringUint64(searchStr, packed.kind());
+    std::optional<EventWriteStatus> result;
+
+    env.generic_foreachFull(txn, env.dbi_Event__replace, searchKey, lmdb::to_sv<uint64_t>(MAX_U64), [&](auto k, auto v) {
+        ParsedKey_StringUint64 parsedKey(k);
+        if (parsedKey.s == searchStr && parsedKey.n == packed.kind()) {
+            auto otherEv = lookupEventByLevId(txn, lmdb::from_sv<uint64_t>(v));
+
+            auto thisTimestamp = packed.created_at();
+            auto otherPacked = PackedEventView(otherEv.buf);
+            auto otherTimestamp = otherPacked.created_at();
+
+            if (otherTimestamp < thisTimestamp ||
+                (otherTimestamp == thisTimestamp && packed.id() < otherPacked.id())) {
+                if (logLevel >= 1) LI << "Deleting event (d-tag). id=" << to_hex(otherPacked.id());
+                levIdsToDelete.push_back(otherEv.primaryKeyId);
+            } else {
+                result = EventWriteStatus::Replaced;
+            }
+        }
+
+        return false;
+    }, true);
+
+    return result;
+}
+
+
+// Collect levIds of events targeted by a kind-5 deletion event, verifying pubkey ownership.
+
+static void collectDeletionTargets(
+    lmdb::txn &txn, PackedEventView packed,
+    std::vector<uint64_t> &levIdsToDelete, uint64_t logLevel)
+{
+    packed.foreachTag([&](char tagName, std::string_view tagVal){
+        if (tagName == 'e') {
+            auto otherEv = lookupEventById(txn, tagVal);
+            if (otherEv && PackedEventView(otherEv->buf).pubkey() == packed.pubkey()) {
+                if (logLevel >= 1) LI << "Deleting event (kind 5). id=" << to_hex(tagVal);
+                levIdsToDelete.push_back(otherEv->primaryKeyId);
+            }
+        }
+        return true;
+    });
+}
+
+
 
 void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vector<EventToWrite> &evs, uint64_t logLevel) {
     std::sort(evs.begin(), evs.end(), [](auto &a, auto &b) {
@@ -28,7 +96,7 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
 
             PackedEventView packed(ev.packedStr);
 
-            if (lookupEventById(txn, packed.id()) || (i != 0 && ev.id() == evs[i-1].id())) {
+            if (eventExistsById(txn, packed.id()) || (i != 0 && ev.id() == evs[i-1].id())) {
                 ev.status = EventWriteStatus::Duplicate;
                 continue;
             }
@@ -40,55 +108,13 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
 
             EventKind kind(packed.kind());
 
-            {
-                std::optional<std::string> replace;
-
-                if (kind.isReplaceable() || kind.isParamReplaceable()) {
-                    packed.foreachTag([&](char tagName, std::string_view tagVal){
-                        if (tagName != 'd') return true;
-                        replace = std::string(tagVal);
-                        return false;
-                    });
-                }
-
-                if (replace) {
-                    auto searchStr = std::string(packed.pubkey()) + *replace;
-                    auto searchKey = makeKey_StringUint64(searchStr, packed.kind());
-
-                    env.generic_foreachFull(txn, env.dbi_Event__replace, searchKey, lmdb::to_sv<uint64_t>(MAX_U64), [&](auto k, auto v) {
-                        ParsedKey_StringUint64 parsedKey(k);
-                        if (parsedKey.s == searchStr && parsedKey.n == packed.kind()) {
-                            auto otherEv = lookupEventByLevId(txn, lmdb::from_sv<uint64_t>(v));
-
-                            auto thisTimestamp = packed.created_at();
-                            auto otherPacked = PackedEventView(otherEv.buf);
-                            auto otherTimestamp = otherPacked.created_at();
-
-                            if (otherTimestamp < thisTimestamp ||
-                                (otherTimestamp == thisTimestamp && packed.id() < otherPacked.id())) {
-                                if (logLevel >= 1) LI << "Deleting event (d-tag). id=" << to_hex(otherPacked.id());
-                                levIdsToDelete.push_back(otherEv.primaryKeyId);
-                            } else {
-                                ev.status = EventWriteStatus::Replaced;
-                            }
-                        }
-
-                        return false;
-                    }, true);
-                }
+            auto replaceResult = checkReplaceable(txn, packed, kind, levIdsToDelete, logLevel);
+            if (replaceResult) {
+                ev.status = *replaceResult;
             }
 
             if (kind.isDeletion()) {
-                packed.foreachTag([&](char tagName, std::string_view tagVal){
-                    if (tagName == 'e') {
-                        auto otherEv = lookupEventById(txn, tagVal);
-                        if (otherEv && PackedEventView(otherEv->buf).pubkey() == packed.pubkey()) {
-                            if (logLevel >= 1) LI << "Deleting event (kind 5). id=" << to_hex(tagVal);
-                            levIdsToDelete.push_back(otherEv->primaryKeyId);
-                        }
-                    }
-                    return true;
-                });
+                collectDeletionTargets(txn, packed, levIdsToDelete, logLevel);
             }
 
             if (ev.status == EventWriteStatus::Pending) {
