@@ -12,26 +12,32 @@
 
 
 
-inline bool isReplaceableKind(uint64_t kind) {
-    return (
-        kind == 0 ||
-        kind == 3 ||
-        kind == 41 ||
-        (kind >= 10'000 && kind < 20'000)
-    );
-}
+struct EventKind {
+    uint64_t value;
 
-inline bool isParamReplaceableKind(uint64_t kind) {
-    return (
-        (kind >= 30'000 && kind < 40'000)
-    );
-}
+    explicit EventKind(uint64_t v) : value(v) {}
+    operator uint64_t() const { return value; }
 
-inline bool isEphemeralKind(uint64_t kind) {
-    return (
-        (kind >= 20'000 && kind < 30'000)
-    );
-}
+    bool isReplaceable() const {
+        return value == 0 || value == 3 || value == 41 ||
+               (value >= 10'000 && value < 20'000);
+    }
+
+    bool isParamReplaceable() const {
+        return value >= 30'000 && value < 40'000;
+    }
+
+    bool isEphemeral() const {
+        return value >= 20'000 && value < 30'000;
+    }
+
+    bool isDeletion() const { return value == 5; }
+};
+
+// Backward-compatible free functions wrapping EventKind
+inline bool isReplaceableKind(uint64_t kind) { return EventKind(kind).isReplaceable(); }
+inline bool isParamReplaceableKind(uint64_t kind) { return EventKind(kind).isParamReplaceable(); }
+inline bool isEphemeralKind(uint64_t kind) { return EventKind(kind).isEphemeral(); }
 
 
 
@@ -91,16 +97,15 @@ enum class EventWriteStatus {
 struct EventToWrite {
     std::string packedStr;
     std::string jsonStr;
-    void *userData = nullptr;
+    uint64_t connId = 0;
     EventWriteStatus status = EventWriteStatus::Pending;
     uint64_t levId = 0;
 
     EventToWrite() {}
 
-    EventToWrite(std::string packedStr, std::string jsonStr, void *userData = nullptr) : packedStr(packedStr), jsonStr(jsonStr), userData(userData) {
+    EventToWrite(std::string packedStr, std::string jsonStr, uint64_t connId = 0) : packedStr(packedStr), jsonStr(jsonStr), connId(connId) {
     }
 
-    // FIXME: do we need these methods anymore?
     std::string_view id() {
         return PackedEventView(packedStr).id();
     }

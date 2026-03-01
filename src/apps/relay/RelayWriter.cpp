@@ -44,7 +44,7 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
                 auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, sourceType, msg->ipAddr, okMsg);
 
                 if (res == PluginEventSifterResult::Accept) {
-                    newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg);
+                    newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId);
                 } else {
                     PackedEventView packed(msg->packedStr);
                     auto eventIdHex = to_hex(packed.id());
@@ -70,12 +70,10 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
             for (auto &newEvent : newEvents) {
                 PackedEventView packed(newEvent.packedStr);
                 auto eventIdHex = to_hex(packed.id());
-                MsgWriter::AddEvent *addEventMsg = static_cast<MsgWriter::AddEvent*>(newEvent.userData);
-
                 std::string message = "Write error: ";
                 message += e.what();
 
-                sendOKResponse(addEventMsg->connId, eventIdHex, false, message);
+                sendOKResponse(newEvent.connId, eventIdHex, false, message);
             }
 
             continue;
@@ -105,9 +103,7 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
                 LI << "Rejected event. " << message << ", id=" << eventIdHex;
             }
 
-            MsgWriter::AddEvent *addEventMsg = static_cast<MsgWriter::AddEvent*>(newEvent.userData);
-
-            sendOKResponse(addEventMsg->connId, eventIdHex, written, message);
+            sendOKResponse(newEvent.connId, eventIdHex, written, message);
         }
     }
 }

@@ -38,10 +38,12 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
                 continue;
             }
 
+            EventKind kind(packed.kind());
+
             {
                 std::optional<std::string> replace;
 
-                if (isReplaceableKind(packed.kind()) || isParamReplaceableKind(packed.kind())) {
+                if (kind.isReplaceable() || kind.isParamReplaceable()) {
                     packed.foreachTag([&](char tagName, std::string_view tagVal){
                         if (tagName != 'd') return true;
                         replace = std::string(tagVal);
@@ -76,8 +78,7 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
                 }
             }
 
-            if (packed.kind() == 5) {
-                // Deletion event, delete all referenced events
+            if (kind.isDeletion()) {
                 packed.foreachTag([&](char tagName, std::string_view tagVal){
                     if (tagName == 'e') {
                         auto otherEv = lookupEventById(txn, tagVal);
