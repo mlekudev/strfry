@@ -35,23 +35,28 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
         // Prepare messages
 
         std::vector<EventToWrite> newEvents;
+        const auto &pluginCmd = cfg().relay__writePolicy__plugin;
 
         for (auto &newMsg : newMsgs) {
             if (auto msg = std::get_if<MsgWriter::AddEvent>(&newMsg.msg)) {
-                tao::json::value evJson = tao::json::from_string(msg->jsonStr);
-                EventSourceType sourceType = msg->ipAddr.size() == 4 ? EventSourceType::IP4 : EventSourceType::IP6;
-                std::string okMsg;
-                auto res = writePolicyPlugin.acceptEvent(cfg().relay__writePolicy__plugin, evJson, sourceType, msg->ipAddr, okMsg);
-
-                if (res == PluginEventSifterResult::Accept) {
+                if (pluginCmd.empty()) {
                     newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId);
                 } else {
-                    PackedEventView packed(msg->packedStr);
-                    auto eventIdHex = to_hex(packed.id());
+                    tao::json::value evJson = tao::json::from_string(msg->jsonStr);
+                    EventSourceType sourceType = msg->ipAddr.size() == 4 ? EventSourceType::IP4 : EventSourceType::IP6;
+                    std::string okMsg;
+                    auto res = writePolicyPlugin.acceptEvent(pluginCmd, evJson, sourceType, msg->ipAddr, okMsg);
 
-                    if (okMsg.size()) LI << "[" << msg->connId << "] write policy blocked event " << eventIdHex << ": " << okMsg;
+                    if (res == PluginEventSifterResult::Accept) {
+                        newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId);
+                    } else {
+                        PackedEventView packed(msg->packedStr);
+                        auto eventIdHex = to_hex(packed.id());
 
-                    sendOKResponse(msg->connId, eventIdHex, res == PluginEventSifterResult::ShadowReject, okMsg);
+                        if (okMsg.size()) LI << "[" << msg->connId << "] write policy blocked event " << eventIdHex << ": " << okMsg;
+
+                        sendOKResponse(msg->connId, eventIdHex, res == PluginEventSifterResult::ShadowReject, okMsg);
+                    }
                 }
             }
         }

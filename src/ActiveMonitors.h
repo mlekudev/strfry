@@ -107,7 +107,7 @@ struct ActiveMonitors : NonCopyable {
             }
         };
 
-        auto processMonitorsExact = [&]<typename T>(btree_map<T, MonitorSet> &m, const T &key, const std::function<bool(const T &)> &matches){
+        auto processMonitorsExact = [&]<typename T, typename Pred>(btree_map<T, MonitorSet> &m, const T &key, Pred &&matches){
             auto it = m.upper_bound(key);
 
             if (it == m.begin()) return;
@@ -124,31 +124,23 @@ struct ActiveMonitors : NonCopyable {
 
         {
             Bytes32 id(packed.id());
-            processMonitorsExact(allIds, id, static_cast<const std::function<bool(const Bytes32&)> &>([&](const Bytes32 &val){
-                return id == val;
-            }));
+            processMonitorsExact(allIds, id, [&](const Bytes32 &val){ return id == val; });
         }
 
         {
             Bytes32 pubkey(packed.pubkey());
-            processMonitorsExact(allAuthors, pubkey, static_cast<const std::function<bool(const Bytes32&)> &>([&](const Bytes32 &val){
-                return pubkey == val;
-            }));
+            processMonitorsExact(allAuthors, pubkey, [&](const Bytes32 &val){ return pubkey == val; });
         }
 
         packed.foreachTag([&](char tagName, std::string_view tagVal){
             auto &tagSpec = getTagSpec(tagName, tagVal);
-            processMonitorsExact(allTags, tagSpec, static_cast<const std::function<bool(const std::string&)> &>([&](const std::string &val){
-                return tagSpec == val;
-            }));
+            processMonitorsExact(allTags, tagSpec, [&](const std::string &val){ return tagSpec == val; });
             return true;
         });
 
         {
             auto kind = packed.kind();
-            processMonitorsExact(allKinds, kind, static_cast<const std::function<bool(const uint64_t&)> &>([&](const uint64_t &val){
-                return kind == val;
-            }));
+            processMonitorsExact(allKinds, kind, [&](const uint64_t &val){ return kind == val; });
         }
 
         processMonitorSet(allOthers);

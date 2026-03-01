@@ -125,7 +125,7 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
                 tmpBuf += ev.jsonStr;
                 env.dbi_EventPayload.put(txn, lmdb::to_sv<uint64_t>(ev.levId), tmpBuf);
 
-                updateNegentropy(PackedEventView(ev.packedStr), true);
+                updateNegentropy(packed, true);
 
                 ev.status = EventWriteStatus::Written;
 
