@@ -18,6 +18,9 @@ struct QueryScheduler : NonCopyable {
     std::vector<uint64_t> levIdBatch;
 
     bool addSub(lmdb::txn &txn, Subscription &&sub) {
+#ifndef NDEBUG
+        sub.transition(Subscription::LifecycleState::Created, Subscription::LifecycleState::Querying, "QueryScheduler::addSub");
+#endif
         sub.latestEventId = getMostRecentLevId(txn);
 
         {

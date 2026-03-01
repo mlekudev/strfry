@@ -30,6 +30,9 @@ void RelayServer::runReqWorker(ThreadPool<MsgReqWorker>::Thread &thr) {
         } else {
             PROM_INC_RELAY_MSG("EOSE");
             sendToConn(sub.connId, tao::json::to_string(tao::json::value::array({ "EOSE", sub.subId.str() })));
+#ifndef NDEBUG
+            sub.transition(Subscription::LifecycleState::Querying, Subscription::LifecycleState::Monitoring, "ReqWorker::onComplete");
+#endif
             tpReqMonitor.dispatch(sub.connId, MsgReqMonitor{MsgReqMonitor::NewSub{std::move(sub)}});
         }
     };

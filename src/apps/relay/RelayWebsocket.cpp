@@ -330,6 +330,8 @@ void RelayServer::runWebsocket(ThreadPool<MsgWebsocket>::Thread &thr) {
         (*r)();
     });
 
+    initSender();
+
 
 
     int port = cfg().relay__port;

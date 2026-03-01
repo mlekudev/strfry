@@ -59,6 +59,24 @@ struct Subscription : NonCopyable {
     // State
 
     uint64_t latestEventId = MAX_U64;
+
+#ifndef NDEBUG
+    enum class LifecycleState { Created, Querying, Monitoring, Closed };
+    LifecycleState debugState = LifecycleState::Created;
+
+    void assertState(LifecycleState expected, const char *context) const {
+        if (debugState != expected) {
+            LW << "Subscription lifecycle violation at " << context
+               << ": expected " << static_cast<int>(expected)
+               << " got " << static_cast<int>(debugState)
+               << " connId=" << connId;
+        }
+    }
+    void transition(LifecycleState from, LifecycleState to, const char *context) {
+        assertState(from, context);
+        debugState = to;
+    }
+#endif
 };
 
 

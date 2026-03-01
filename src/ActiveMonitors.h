@@ -14,6 +14,9 @@ struct ActiveMonitors : NonCopyable {
   private:
     struct Monitor : NonCopyable {
         Subscription sub;
+#ifndef NDEBUG
+        size_t debugInstalledCount = 0;
+#endif
 
         Monitor(Subscription &sub_) : sub(std::move(sub_)) {}
         Monitor(const Monitor&) = delete; // pointers to filters inside sub must be stable because they are stored in MonitorSets
@@ -45,6 +48,9 @@ struct ActiveMonitors : NonCopyable {
 
   public:
     bool addSub(lmdb::txn &txn, Subscription &&sub, uint64_t currEventId) {
+#ifndef NDEBUG
+        sub.assertState(Subscription::LifecycleState::Monitoring, "ActiveMonitors::addSub");
+#endif
         if (sub.latestEventId != currEventId) throw herr("sub not up to date");
 
         {
@@ -165,16 +171,25 @@ struct ActiveMonitors : NonCopyable {
     }
 
     void installLookups(Monitor *m, uint64_t currEventId) {
+#ifndef NDEBUG
+        size_t installed = 0;
+#endif
         for (auto &f : m->sub.filterGroup.filters) {
             if (f.ids) {
                 for (size_t i = 0; i < f.ids->size(); i++) {
                     auto res = allIds.try_emplace(Bytes32(f.ids->at(i)));
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
+#ifndef NDEBUG
+                    installed++;
+#endif
                 }
             } else if (f.authors) {
                 for (size_t i = 0; i < f.authors->size(); i++) {
                     auto res = allAuthors.try_emplace(Bytes32(f.authors->at(i)));
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
+#ifndef NDEBUG
+                    installed++;
+#endif
                 }
             } else if (f.tags.size()) {
                 for (const auto &[tagName, filterSet] : f.tags) {
@@ -182,20 +197,35 @@ struct ActiveMonitors : NonCopyable {
                         auto &tagSpec = getTagSpec(tagName, filterSet.at(i));
                         auto res = allTags.try_emplace(tagSpec);
                         res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
+#ifndef NDEBUG
+                        installed++;
+#endif
                     }
                 }
             } else if (f.kinds) {
                 for (size_t i = 0; i < f.kinds->size(); i++) {
                     auto res = allKinds.try_emplace(f.kinds->at(i));
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
+#ifndef NDEBUG
+                    installed++;
+#endif
                 }
             } else {
                 allOthers.try_emplace(&f, MonitorItem{m, currEventId});
+#ifndef NDEBUG
+                installed++;
+#endif
             }
         }
+#ifndef NDEBUG
+        m->debugInstalledCount = installed;
+#endif
     }
 
     void uninstallLookups(Monitor *m) {
+#ifndef NDEBUG
+        size_t removed = 0;
+#endif
         for (auto &f : m->sub.filterGroup.filters) {
             if (f.ids) {
                 for (size_t i = 0; i < f.ids->size(); i++) {
@@ -203,6 +233,9 @@ struct ActiveMonitors : NonCopyable {
                     auto &monSet = allIds.at(id);
                     monSet.erase(&f);
                     if (monSet.empty()) allIds.erase(id);
+#ifndef NDEBUG
+                    removed++;
+#endif
                 }
             } else if (f.authors) {
                 for (size_t i = 0; i < f.authors->size(); i++) {
@@ -210,6 +243,9 @@ struct ActiveMonitors : NonCopyable {
                     auto &monSet = allAuthors.at(author);
                     monSet.erase(&f);
                     if (monSet.empty()) allAuthors.erase(author);
+#ifndef NDEBUG
+                    removed++;
+#endif
                 }
             } else if (f.tags.size()) {
                 for (const auto &[tagName, filterSet] : f.tags) {
@@ -218,6 +254,9 @@ struct ActiveMonitors : NonCopyable {
                         auto &monSet = allTags.at(tagSpec);
                         monSet.erase(&f);
                         if (monSet.empty()) allTags.erase(tagSpec);
+#ifndef NDEBUG
+                        removed++;
+#endif
                     }
                 }
             } else if (f.kinds) {
@@ -226,10 +265,23 @@ struct ActiveMonitors : NonCopyable {
                     auto &monSet = allKinds.at(kind);
                     monSet.erase(&f);
                     if (monSet.empty()) allKinds.erase(kind);
+#ifndef NDEBUG
+                    removed++;
+#endif
                 }
             } else {
                 allOthers.erase(&f);
+#ifndef NDEBUG
+                removed++;
+#endif
             }
         }
+#ifndef NDEBUG
+        if (removed != m->debugInstalledCount) {
+            LW << "ActiveMonitors: install/uninstall mismatch — installed "
+               << m->debugInstalledCount << " but removed " << removed
+               << " for connId=" << m->sub.connId;
+        }
+#endif
     }
 };
