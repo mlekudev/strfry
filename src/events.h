@@ -98,13 +98,14 @@ enum class EventWriteStatus {
 struct EventToWrite {
     std::string packedStr;
     std::string jsonStr;
+    std::string ipAddr;
     uint64_t connId = 0;
     EventWriteStatus status = EventWriteStatus::Pending;
     uint64_t levId = 0;
 
     EventToWrite() {}
 
-    EventToWrite(std::string packedStr, std::string jsonStr, uint64_t connId = 0) : packedStr(packedStr), jsonStr(jsonStr), connId(connId) {
+    EventToWrite(std::string packedStr, std::string jsonStr, uint64_t connId = 0, std::string ipAddr = "") : packedStr(packedStr), jsonStr(jsonStr), ipAddr(ipAddr), connId(connId) {
     }
 
     std::string_view id() {

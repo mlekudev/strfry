@@ -34,7 +34,7 @@ void RelayServer::runIngester(ThreadPool<MsgIngester>::Thread &thr) {
                             } catch (std::exception &e) {
                                 sendOKResponse(msg->connId, arr[1].is_object() && arr[1].at("id").is_string() ? arr[1].at("id").get_string() : "?",
                                                false, std::string("invalid: ") + e.what());
-                                if (cfg().relay__logging__invalidEvents) LI << "Rejected invalid event: " << e.what();
+                                if (cfg().relay__logging__invalidEvents) LI << "Rejected invalid event: " << e.what() << " ip=" << renderIP(msg->ipAddr);
                             }
                         } else if (cmd == "REQ" || cmd == "COUNT") {
                             PROM_INC_CLIENT_MSG(cmd);
@@ -93,6 +93,21 @@ void RelayServer::runIngester(ThreadPool<MsgIngester>::Thread &thr) {
 }
 
 void RelayServer::ingesterProcessEvent(lmdb::txn &txn, uint64_t connId, std::string ipAddr, secp256k1_context *secpCtx, const tao::json::value &origJson, std::vector<MsgWriter> &output) {
+    // Skip signature verification for ephemeral events with no subscribers
+    if (origJson.is_object()) {
+        auto kindIt = origJson.find("kind");
+        if (kindIt != nullptr && kindIt->is_integer()) {
+            uint64_t kind = kindIt->get_unsigned();
+            if (isEphemeralKind(kind) && !ephemeralTracker.hasSubscribersForKind(kind)) {
+                auto idIt = origJson.find("id");
+                std::string eventId = (idIt != nullptr && idIt->is_string()) ? idIt->get_string() : "?";
+                LI << "Ephemeral event kind=" << kind << " dropped (no subscribers) ip=" << renderIP(ipAddr);
+                sendOKResponse(connId, eventId, false, "blocked: no subscribers for ephemeral kind");
+                return;
+            }
+        }
+    }
+
     std::string packedStr, jsonStr;
 
     parseAndVerifyEvent(origJson, secpCtx, true, true, packedStr, jsonStr);
@@ -114,7 +129,7 @@ void RelayServer::ingesterProcessEvent(lmdb::txn &txn, uint64_t connId, std::str
         });
 
         if (foundProtected) {
-            LI << "Protected event, skipping";
+            LI << "Protected event, skipping. kind=" << packed.kind() << " ip=" << renderIP(ipAddr);
             sendOKResponse(connId, to_hex(packed.id()), false, "blocked: event marked as protected");
             return;
         }
@@ -122,7 +137,7 @@ void RelayServer::ingesterProcessEvent(lmdb::txn &txn, uint64_t connId, std::str
 
     {
         if (eventExistsById(txn, packed.id())) {
-            LI << "Duplicate event, skipping";
+            LI << "Duplicate event, skipping. kind=" << packed.kind() << " ip=" << renderIP(ipAddr);
             sendOKResponse(connId, to_hex(packed.id()), true, "duplicate: have this event");
             return;
         }

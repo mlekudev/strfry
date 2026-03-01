@@ -16,6 +16,7 @@ void RelayServer::runReqMonitor(ThreadPool<MsgReqMonitor>::Thread &thr) {
 
     Decompressor decomp;
     ActiveMonitors monitors;
+    monitors.ephemeralTracker = &ephemeralTracker;
     uint64_t currEventId = MAX_U64;
 
     while (1) {

@@ -7,10 +7,14 @@
 #include "Bytes32.h"
 #include "Subscription.h"
 #include "filters.h"
+#include "events.h"
+#include "EphemeralSubTracker.h"
 
 
 
 struct ActiveMonitors : NonCopyable {
+    EphemeralSubTracker *ephemeralTracker = nullptr;
+
   private:
     struct Monitor : NonCopyable {
         Subscription sub;
@@ -199,14 +203,17 @@ struct ActiveMonitors : NonCopyable {
                 }
             } else if (f.kinds) {
                 for (size_t i = 0; i < f.kinds->size(); i++) {
-                    auto res = allKinds.try_emplace(f.kinds->at(i));
+                    auto kind = f.kinds->at(i);
+                    auto res = allKinds.try_emplace(kind);
                     res.first->second.try_emplace(&f, MonitorItem{m, currEventId});
+                    if (ephemeralTracker && isEphemeralKind(kind)) ephemeralTracker->addKind(kind);
 #ifndef NDEBUG
                     installed++;
 #endif
                 }
             } else {
                 allOthers.try_emplace(&f, MonitorItem{m, currEventId});
+                if (ephemeralTracker) ephemeralTracker->addCatchAll();
 #ifndef NDEBUG
                 installed++;
 #endif
@@ -260,12 +267,14 @@ struct ActiveMonitors : NonCopyable {
                     auto &monSet = allKinds.at(kind);
                     monSet.erase(&f);
                     if (monSet.empty()) allKinds.erase(kind);
+                    if (ephemeralTracker && isEphemeralKind(kind)) ephemeralTracker->removeKind(kind);
 #ifndef NDEBUG
                     removed++;
 #endif
                 }
             } else {
                 allOthers.erase(&f);
+                if (ephemeralTracker) ephemeralTracker->removeCatchAll();
 #ifndef NDEBUG
                 removed++;
 #endif

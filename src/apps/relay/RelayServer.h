@@ -21,9 +21,11 @@
 #include "PrometheusMetrics.h"
 #include "RelayMessages.h"
 #include "RelaySender.h"
+#include "EphemeralSubTracker.h"
 
 
 struct RelayServer {
+    EphemeralSubTracker ephemeralTracker;
     uS::Async *hubTrigger = nullptr;
 
     // Thread Pools

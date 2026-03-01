@@ -40,7 +40,7 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
         for (auto &newMsg : newMsgs) {
             if (auto msg = std::get_if<MsgWriter::AddEvent>(&newMsg.msg)) {
                 if (pluginCmd.empty()) {
-                    newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId);
+                    newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId, std::move(msg->ipAddr));
                 } else {
                     tao::json::value evJson = tao::json::from_string(msg->jsonStr);
                     EventSourceType sourceType = msg->ipAddr.size() == 4 ? EventSourceType::IP4 : EventSourceType::IP6;
@@ -48,12 +48,12 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
                     auto res = writePolicyPlugin.acceptEvent(pluginCmd, evJson, sourceType, msg->ipAddr, okMsg);
 
                     if (res == PluginEventSifterResult::Accept) {
-                        newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId);
+                        newEvents.emplace_back(std::move(msg->packedStr), std::move(msg->jsonStr), msg->connId, std::move(msg->ipAddr));
                     } else {
                         PackedEventView packed(msg->packedStr);
                         auto eventIdHex = to_hex(packed.id());
 
-                        if (okMsg.size()) LI << "[" << msg->connId << "] write policy blocked event " << eventIdHex << ": " << okMsg;
+                        if (okMsg.size()) LI << "[" << msg->connId << "] write policy blocked event " << eventIdHex << ": " << okMsg << " kind=" << packed.kind() << " ip=" << renderIP(msg->ipAddr);
 
                         sendOKResponse(msg->connId, eventIdHex, res == PluginEventSifterResult::ShadowReject, okMsg);
                     }
@@ -93,7 +93,7 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
             bool written = false;
 
             if (newEvent.status == EventWriteStatus::Written) {
-                LI << "Inserted event. id=" << eventIdHex << " levId=" << newEvent.levId;
+                LI << "Inserted event. id=" << eventIdHex << " kind=" << packed.kind() << " levId=" << newEvent.levId;
                 written = true;
             } else if (newEvent.status == EventWriteStatus::Duplicate) {
                 message = "duplicate: have this event";
@@ -105,7 +105,7 @@ void RelayServer::runWriter(ThreadPool<MsgWriter>::Thread &thr) {
             }
 
             if (newEvent.status != EventWriteStatus::Written) {
-                LI << "Rejected event. " << message << ", id=" << eventIdHex;
+                LI << "Rejected event. " << message << ", id=" << eventIdHex << " kind=" << packed.kind() << " ip=" << renderIP(newEvent.ipAddr);
             }
 
             sendOKResponse(newEvent.connId, eventIdHex, written, message);
