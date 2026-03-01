@@ -1,7 +1,54 @@
-/build/
-*.d
+# Allowlist: ignore everything, then permit only what belongs in the repo
+*
+
+# Git metadata
+!.gitignore
+!.gitmodules
+
+# Build system
+!Makefile
+!golpe.yaml
+!shell.nix
+
+# Source code
+!src/
+!src/**
+!golpe
+!external/
+!external/**
+!include/
+!include/**
+
+# Documentation
+!docs/
+!docs/**
+!*.md
+!LICENSE
+!TODO
+!CHANGES
+
+# Config and deployment
+!strfry.conf
+!sample-docker-compose.yaml
+!*.Dockerfile
+!debian/
+!debian/**
+!scripts/
+!scripts/**
+!.github/
+!.github/**
+
+# Test suite
+!test/
+!test/**
+
+# DB directory marker
+!strfry-db/
+!strfry-db/.keep
+
+# Deny build artifacts even inside allowed directories
 *.o
-/strfry
-/strfry-db/*.mdb
-.vscode/*
-/strfry-db-test/
+*.d
+build/
+strfry-db/*.mdb
+strfry-db-test/
