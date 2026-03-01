@@ -97,7 +97,7 @@ struct Router {
                 if (newFilterStr != filterStr) needsReconnect = true;
 
                 filterStr = newFilterStr;
-                filterCompiled = NostrFilterGroup::unwrapped(newFilter);
+                filterCompiled = NostrFilterGroup::unwrapped(newFilter, cfg().relay__maxFilterLimit);
                 filter = newFilter;
             }
 

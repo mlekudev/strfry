@@ -49,7 +49,7 @@ void cmd_sync(const std::vector<std::string> &subArgs) {
 
 
     tao::json::value filterJson = tao::json::from_string(filterStr);
-    auto filterCompiled = NostrFilterGroup::unwrapped(filterJson);
+    auto filterCompiled = NostrFilterGroup::unwrapped(filterJson, cfg().relay__maxFilterLimit);
 
     std::optional<uint64_t> treeId;
     negentropy::storage::Vector storageVector;

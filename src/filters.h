@@ -212,7 +212,7 @@ struct NostrFilterGroup {
     NostrFilterGroup() {}
 
     // Note that this expects the full array, so the first two items are "REQ" and the subId
-    NostrFilterGroup(const tao::json::value &req, uint64_t maxFilterLimit = cfg().relay__maxFilterLimit) {
+    NostrFilterGroup(const tao::json::value &req, uint64_t maxFilterLimit) {
         const auto &arr = req.get_array();
         if (arr.size() < 3) throw herr("too small");
 
@@ -222,8 +222,7 @@ struct NostrFilterGroup {
         }
     }
 
-    // FIXME refactor: Make unwrapped the default constructor
-    static NostrFilterGroup unwrapped(tao::json::value filter, uint64_t maxFilterLimit = cfg().relay__maxFilterLimit) {
+    static NostrFilterGroup unwrapped(tao::json::value filter, uint64_t maxFilterLimit) {
         if (!filter.is_array()) {
             filter = tao::json::value::array({ filter });
         }
