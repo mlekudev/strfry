@@ -31,7 +31,7 @@ void cmd_export(const std::vector<std::string> &subArgs) {
     if (dbVersion == 0) throw herr("migration from DB version 0 not supported by this version of strfry");
 
     if (fried) {
-        if (std::endian::native != std::endian::little) throw herr("--fried currently only supported on little-endian CPUs"); // FIXME
+        if (std::endian::native != std::endian::little) throw herr("--fried requires little-endian CPU (PackedEvent uses native-endian uint64_t fields)");
         if (dbVersion < 3) throw herr("can't export old DB version with --fried: please downgrade to 0.9.7");
     }
 

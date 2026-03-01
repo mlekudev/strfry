@@ -133,7 +133,10 @@ void writeEvents(lmdb::txn &txn, NegentropyFilterCache &neFilterCache, std::vect
 
                 for (auto levId : levIdsToDelete) {
                     auto evToDel = env.lookup_Event(txn, levId);
-                    if (!evToDel) continue; // already deleted
+                    if (!evToDel) {
+                        if (logLevel >= 1) LI << "Deletion target levId=" << levId << " already deleted";
+                        continue;
+                    }
                     updateNegentropy(PackedEventView(evToDel->buf), false);
                     deleteEventBasic(txn, levId);
                 }

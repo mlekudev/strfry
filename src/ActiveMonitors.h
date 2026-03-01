@@ -74,7 +74,10 @@ struct ActiveMonitors : NonCopyable {
 
     void removeSub(uint64_t connId, const SubId &subId) {
         auto *monitor = findMonitor(connId, subId);
-        if (!monitor) return;
+        if (!monitor) {
+            LI << "ActiveMonitors::removeSub: monitor not found for connId=" << connId << " subId=" << subId.str();
+            return;
+        }
 
         uninstallLookups(monitor);
 

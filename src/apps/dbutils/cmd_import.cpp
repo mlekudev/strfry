@@ -73,7 +73,7 @@ void cmd_import(const std::vector<std::string> &subArgs) {
         std::string line(buf, (size_t)numRead-1);
 
         if (fried) {
-            if (std::endian::native != std::endian::little) throw herr("--fried currently only supported on little-endian CPUs"); // FIXME
+            if (std::endian::native != std::endian::little) throw herr("--fried requires little-endian CPU (PackedEvent uses native-endian uint64_t fields)");
 
             try {
                 writer.write(parseFried(line));
